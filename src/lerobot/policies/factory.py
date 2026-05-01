@@ -44,6 +44,7 @@ from lerobot.policies.utils import validate_visual_features_consistency
 from lerobot.policies.vqbet.configuration_vqbet import VQBeTConfig
 from lerobot.policies.wall_x.configuration_wall_x import WallXConfig
 from lerobot.policies.xvla.configuration_xvla import XVLAConfig
+from lerobot.policies.vla_jepa.configuration_vla_jepa import VLAJEPAConfig
 from lerobot.processor import PolicyProcessorPipeline
 from lerobot.processor.converters import (
     batch_to_transition,
@@ -158,6 +159,10 @@ def get_policy_class(name: str) -> type[PreTrainedPolicy]:
         from lerobot.policies.wall_x.modeling_wall_x import WallXPolicy
 
         return WallXPolicy
+    elif name == "vla_jepa":
+        from lerobot.policies.vla_jepa.modeling_vla_jepa import VLAJEPAPolicy
+
+        return VLAJEPAPolicy
     else:
         try:
             return _get_policy_cls_from_policy_name(name=name)
@@ -210,6 +215,8 @@ def make_policy_config(policy_type: str, **kwargs) -> PreTrainedConfig:
         return XVLAConfig(**kwargs)
     elif policy_type == "wall_x":
         return WallXConfig(**kwargs)
+    elif policy_type == "vla_jepa":
+        return VLAJEPAConfig(**kwargs)
     else:
         try:
             config_cls = PreTrainedConfig.get_choice_class(policy_type)
@@ -426,6 +433,14 @@ def make_pre_post_processors(
         from lerobot.policies.wall_x.processor_wall_x import make_wall_x_pre_post_processors
 
         processors = make_wall_x_pre_post_processors(
+            config=policy_cfg,
+            dataset_stats=kwargs.get("dataset_stats"),
+        )
+
+    elif isinstance(policy_cfg, VLAJEPAConfig):
+        from lerobot.policies.vla_jepa.processor_vla_jepa import make_vla_jepa_pre_post_processors
+
+        processors = make_vla_jepa_pre_post_processors(
             config=policy_cfg,
             dataset_stats=kwargs.get("dataset_stats"),
         )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from lerobot.configs.policies import PreTrainedConfig
 from lerobot.configs.types import NormalizationMode
@@ -49,6 +50,7 @@ class VLAJEPAConfig(PreTrainedConfig):
     action_noise_beta_alpha: float = 1.5
     action_noise_beta_beta: float = 1.0
     action_noise_s: float = 0.999
+    repeated_diffusion_steps: int = 4
 
     num_video_frames: int = 4
     predictor_depth: int = 6
@@ -59,6 +61,9 @@ class VLAJEPAConfig(PreTrainedConfig):
     enable_world_model: bool = True
 
     resize_images_to: tuple[int, int] | None = None
+    action_unnormalization_stats: dict[str, Any] | None = None
+    binarize_gripper_action: bool = True
+    clip_normalized_actions: bool = True
     torch_dtype: str = "bfloat16"
 
     optimizer_lr: float = 1e-4

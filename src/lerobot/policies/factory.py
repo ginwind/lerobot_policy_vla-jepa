@@ -59,6 +59,7 @@ from .utils import validate_visual_features_consistency
 from .vqbet.configuration_vqbet import VQBeTConfig
 from .wall_x.configuration_wall_x import WallXConfig
 from .xvla.configuration_xvla import XVLAConfig
+from .vla_jepa.configuration_vla_jepa import VLAJEPAConfig
 
 
 def _reconnect_relative_absolute_steps(

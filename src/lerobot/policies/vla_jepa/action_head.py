@@ -83,8 +83,10 @@ class BasicTransformerBlock(nn.Module):
         attention_head_dim: int,
         dropout: float,
         cross_attention_dim: int,
+        is_cross_attention: bool = True,
     ) -> None:
         super().__init__()
+        self.is_cross_attention = is_cross_attention
         self.norm1 = AdaLayerNorm(dim)
         self.attn = Attention(
             query_dim=dim,
@@ -105,7 +107,8 @@ class BasicTransformerBlock(nn.Module):
         temb: torch.Tensor,
     ) -> torch.Tensor:
         attn_input = self.norm1(hidden_states, temb)
-        hidden_states = hidden_states + self.attn(attn_input, encoder_hidden_states=encoder_hidden_states)
+        attention_context = encoder_hidden_states if self.is_cross_attention else None
+        hidden_states = hidden_states + self.attn(attn_input, encoder_hidden_states=attention_context)
         hidden_states = hidden_states + self.ff(self.norm2(hidden_states))
         return hidden_states
 
@@ -133,9 +136,10 @@ class DiT(ModelMixin, ConfigMixin):
                     num_attention_heads=num_attention_heads,
                     attention_head_dim=attention_head_dim,
                     dropout=dropout,
-                    cross_attention_dim=cross_attention_dim,
+                    cross_attention_dim=cross_attention_dim if layer_idx % 2 == 0 else self.inner_dim,
+                    is_cross_attention=layer_idx % 2 == 0,
                 )
-                for _ in range(num_layers)
+                for layer_idx in range(num_layers)
             ]
         )
         self.norm_out = nn.LayerNorm(self.inner_dim, eps=1e-6, elementwise_affine=False)
@@ -175,35 +179,46 @@ class VLAJEPAActionHead(nn.Module):
         super().__init__()
         preset = DIT_PRESETS[config.action_model_type]
         self.config = config
-        self.input_embedding_dim = preset.hidden_size
+        num_heads = config.action_num_heads or preset.num_attention_heads
+        attention_head_dim = config.action_attention_head_dim or preset.attention_head_dim
+        self.input_embedding_dim = num_heads * attention_head_dim
+        self.hidden_size = config.action_hidden_size
         self.action_horizon = config.future_action_window_size + 1
         self.num_inference_timesteps = config.num_inference_timesteps
 
         self.model = DiT(
-            num_attention_heads=config.action_num_heads or preset.num_attention_heads,
-            attention_head_dim=config.action_attention_head_dim or preset.attention_head_dim,
+            num_attention_heads=num_heads,
+            attention_head_dim=attention_head_dim,
             output_dim=config.action_hidden_size,
             num_layers=config.action_num_layers,
             dropout=config.action_dropout,
             cross_attention_dim=cross_attention_dim,
         )
-        self.action_encoder = ActionEncoder(config.action_dim, config.action_hidden_size)
+        self.action_encoder = ActionEncoder(config.action_dim, self.input_embedding_dim)
         self.action_decoder = nn.Sequential(
-            nn.Linear(config.action_hidden_size, config.action_hidden_size),
-            nn.GELU(),
-            nn.Linear(config.action_hidden_size, config.action_dim),
+            nn.Linear(self.hidden_size, self.hidden_size),
+            nn.ReLU(),
+            nn.Linear(self.hidden_size, config.action_dim),
         )
         self.state_encoder = (
             nn.Sequential(
-                nn.Linear(config.state_dim, config.action_hidden_size),
-                nn.GELU(),
-                nn.Linear(config.action_hidden_size, config.action_hidden_size),
+                nn.Linear(config.state_dim, self.hidden_size),
+                nn.ReLU(),
+                nn.Linear(self.hidden_size, self.input_embedding_dim),
             )
             if config.state_dim > 0
             else None
         )
-        self.future_tokens = nn.Embedding(config.num_action_tokens_per_timestep, config.action_hidden_size)
-        self.position_embedding = nn.Embedding(config.chunk_size + config.num_action_tokens_per_timestep + 4, config.action_hidden_size)
+        # starVLA uses num_target_vision_tokens=32 for JEVLA1; the closest
+        # LeRobot config field with the same checkpoint value is the embodied
+        # action token count.
+        self.future_tokens = nn.Embedding(
+            config.num_embodied_action_tokens_per_instruction, self.input_embedding_dim
+        )
+        self.position_embedding = nn.Embedding(
+            max(1024, config.chunk_size + config.num_action_tokens_per_timestep + 4),
+            self.input_embedding_dim,
+        )
         self.beta_dist = Beta(config.action_noise_beta_alpha, config.action_noise_beta_beta)
 
     def sample_time(self, batch_size: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:

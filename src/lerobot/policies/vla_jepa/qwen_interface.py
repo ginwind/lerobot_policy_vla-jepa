@@ -14,9 +14,12 @@ class Qwen3VLInterface(torch.nn.Module):
     def __init__(self, config: VLAJEPAConfig) -> None:
         super().__init__()
         self.config = config
+        model_kwargs = {"dtype": self._get_torch_dtype(config.torch_dtype)}
+        if config.qwen_attn_implementation:
+            model_kwargs["attn_implementation"] = config.qwen_attn_implementation
         self.model = Qwen3VLForConditionalGeneration.from_pretrained(
             config.qwen_model_name,
-            torch_dtype=self._get_torch_dtype(config.torch_dtype),
+            **model_kwargs,
         )
         self.processor = AutoProcessor.from_pretrained(config.qwen_model_name)
         self.processor.tokenizer.padding_side = config.tokenizer_padding_side
@@ -90,7 +93,7 @@ class Qwen3VLInterface(torch.nn.Module):
         image = image.float()
         if image.max() <= 1.0:
             image = image * 255.0
-        image = image.clamp(0, 255).to(torch.uint8).numpy()
+        image = image.clamp(0, 255).round().to(torch.uint8).numpy()
         if image.shape[-1] == 1:
             image = np.repeat(image, 3, axis=-1)
         return Image.fromarray(image)

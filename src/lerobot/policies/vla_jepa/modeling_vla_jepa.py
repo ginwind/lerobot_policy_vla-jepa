@@ -6,6 +6,7 @@ from typing import List, Optional
 
 import logging
 
+import cv2 as cv
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -298,9 +299,17 @@ class VLAJEPAModel(nn.Module):
         """
         if self.config.resize_images_to is not None:
             height, width = self.config.resize_images_to
-            resampling = getattr(Image, "Resampling", Image).BOX
             batch_images = [
-                [image.resize((width, height), resample=resampling) for image in sample_images]
+                [
+                    Image.fromarray(
+                        cv.resize(
+                            np.asarray(image.convert("RGB")),
+                            (width, height),
+                            interpolation=cv.INTER_AREA,
+                        )
+                    )
+                    for image in sample_images
+                ]
                 for sample_images in batch_images
             ]
 
@@ -432,7 +441,7 @@ class VLAJEPAPolicy(PreTrainedPolicy):
                 # Clamp to [0, 255]
                 if t_np.max() <= 1.0:
                     t_np = t_np * 255.0
-                t_np = t_np.clip(0, 255).astype(np.uint8)
+                t_np = np.rint(t_np.clip(0, 255)).astype(np.uint8)
                 sample_views.append(t_np)
             # Stack views: [V, T, H, W, 3]
             videos_per_sample.append(np.stack(sample_views, axis=0))

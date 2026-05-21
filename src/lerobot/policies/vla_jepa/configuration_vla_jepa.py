@@ -26,6 +26,7 @@ class VLAJEPAConfig(PreTrainedConfig):
 
     qwen_model_name: str = "Qwen/Qwen3-VL-4B-Instruct"
     jepa_encoder_name: str = "facebook/vjepa2-vitl-fpc64-256"
+    qwen_attn_implementation: str | None = None
 
     tokenizer_padding_side: str = "left"
     prompt_template: str = "{instruction}\n\nPredict {actions} and condition future prediction with {e_actions}."
